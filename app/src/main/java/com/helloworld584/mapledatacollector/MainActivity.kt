@@ -101,6 +101,19 @@ class MainActivity : AppCompatActivity() {
         updateOverlayButton()
     }
 
+    /**
+     * OverlayService가 ACTION_REQUEST_MEDIA_PROJECTION을 보내면 호출됨.
+     * 앱 재시작 없이 MediaProjection 권한을 재요청한다.
+     */
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent?.action == OverlayService.ACTION_REQUEST_MEDIA_PROJECTION) {
+            log("화면 캡처 권한을 다시 요청합니다...")
+            requestMediaProjection()
+        }
+    }
+
     private fun requestMediaProjection() {
         val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         startActivityForResult(mgr.createScreenCaptureIntent(), REQUEST_MEDIA_PROJECTION)

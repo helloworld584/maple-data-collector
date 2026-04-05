@@ -16,7 +16,10 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
+            <!-- singleTop: OverlayService가 onNewIntent로 MediaProjection 재요청 시
+                 기존 인스턴스를 재사용하여 새 Activity가 생성되지 않게 함 -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

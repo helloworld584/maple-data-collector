@@ -1,5 +1,6 @@
 package com.helloworld584.mapledatacollector
 
+import android.app.AlertDialog
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,6 +10,8 @@ import android.graphics.PixelFormat
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.IBinder
+import android.view.ContextThemeWrapper
+import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -27,16 +30,65 @@ class OverlayService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
+        /** MainActivity가 이 Action을 받으면 MediaProjection 권한 요청 다이얼로그를 띄운다 */
+        const val ACTION_REQUEST_MEDIA_PROJECTION =
+            "com.helloworld584.mapledatacollector.REQUEST_MEDIA_PROJECTION"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID      = "maple_collector_channel"
     }
 
     private lateinit var windowManager: WindowManager
-    private var overlayView: View? = null
-    private var mediaProjection: MediaProjection? = null
+    private var overlayView:   View?        = null
+    private var overlayButton: ImageButton? = null
+    private var progressBar:   ProgressBar? = null
+    private var overlayParams: WindowManager.LayoutParams? = null
+
+    private var mediaProjection:    MediaProjection?    = null
     private var screenCaptureManager: ScreenCaptureManager? = null
 
+    // ── 드래그 상태 (long-press 후 활성화) ───────────────────────────────────
+    private var isDragMode  = false
+    private var dragInitX   = 0;   private var dragInitY   = 0
+    private var dragInitTX  = 0f;  private var dragInitTY  = 0f
+    private var lastRawX    = 0f;  private var lastRawY    = 0f
+
+    // ── 최소화 상태 (double-tap 토글) ─────────────────────────────────────────
+    private var isMinimized = false
+
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // GestureDetector: single-tap / double-tap / long-press 분기
+    private val gestureDetector: GestureDetector by lazy {
+        GestureDetector(applicationContext, object : GestureDetector.SimpleOnGestureListener() {
+
+            /** 단순 클릭 → 미리보기 팝업 */
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                val btn = overlayButton ?: return false
+                if (!btn.isEnabled) return false
+                showCollectionPreview()
+                return true
+            }
+
+            /** 더블탭 → 축소 / 복원 토글 */
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                toggleMinimize()
+                return true
+            }
+
+            /** 길게 누름 → 드래그 모드 진입 */
+            override fun onLongPress(e: MotionEvent) {
+                isDragMode  = true
+                dragInitX   = overlayParams?.x ?: 0
+                dragInitY   = overlayParams?.y ?: 0
+                dragInitTX  = lastRawX
+                dragInitTY  = lastRawY
+            }
+        })
+    }
+
+    // =========================================================================
+    // 서비스 생명주기
+    // =========================================================================
 
     override fun onCreate() {
         super.onCreate()
@@ -58,6 +110,19 @@ class OverlayService : Service() {
         return START_STICKY
     }
 
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.cancel()
+        overlayView?.let { windowManager.removeView(it); overlayView = null }
+        screenCaptureManager?.release()
+    }
+
+    // =========================================================================
+    // 오버레이 버튼 표시
+    // =========================================================================
+
     private fun showOverlay() {
         if (overlayView != null) return
 
@@ -72,55 +137,110 @@ class OverlayService : Service() {
             x = 16
             y = 200
         }
+        overlayParams = params
 
         val view   = LayoutInflater.from(this).inflate(R.layout.overlay_button, null)
         val button = view.findViewById<ImageButton>(R.id.btn_collect)
         val prog   = view.findViewById<ProgressBar>(R.id.progress_indicator)
-
-        // 드래그 지원
-        var initX = 0;   var initY  = 0
-        var initTX = 0f; var initTY = 0f
-        var dragging = false
+        overlayButton = button
+        progressBar   = prog
 
         view.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    initX = params.x; initY = params.y
-                    initTX = event.rawX; initTY = event.rawY
-                    dragging = false
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = (initTX - event.rawX).toInt()
-                    val dy = (event.rawY - initTY).toInt()
-                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) dragging = true
-                    params.x = initX + dx
-                    params.y = initY + dy
-                    windowManager.updateViewLayout(view, params)
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (!dragging) button.performClick()
-                    true
-                }
-                else -> false
-            }
-        }
+            // 항상 현재 위치를 기록 (long-press 드래그 시작점에 사용)
+            lastRawX = event.rawX
+            lastRawY = event.rawY
 
-        button.setOnClickListener {
-            if (!button.isEnabled) return@setOnClickListener
-            startCollection(button, prog)
+            // GestureDetector에 모든 이벤트 전달 (single/double/longpress 판별)
+            gestureDetector.onTouchEvent(event)
+
+            // long-press 이후 드래그 처리
+            if (isDragMode) {
+                when (event.action) {
+                    MotionEvent.ACTION_MOVE -> {
+                        params.x = dragInitX + (dragInitTX - event.rawX).toInt()
+                        params.y = dragInitY + (event.rawY  - dragInitTY).toInt()
+                        windowManager.updateViewLayout(view, params)
+                    }
+                    MotionEvent.ACTION_UP,
+                    MotionEvent.ACTION_CANCEL -> isDragMode = false
+                }
+            }
+            true
         }
 
         overlayView = view
         windowManager.addView(view, params)
     }
 
+    // =========================================================================
+    // 더블탭: 축소 / 복원
+    // =========================================================================
+
+    private fun toggleMinimize() {
+        isMinimized = !isMinimized
+        val sizePx = dpToPx(if (isMinimized) 16 else 56)
+
+        overlayButton?.let { btn ->
+            val lp     = btn.layoutParams
+            lp.width   = sizePx
+            lp.height  = sizePx
+            btn.layoutParams = lp
+            btn.alpha  = if (isMinimized) 0.4f else 1.0f
+            if (isMinimized) btn.setImageDrawable(null)
+            else             btn.setImageResource(android.R.drawable.ic_menu_camera)
+        }
+        if (isMinimized) progressBar?.visibility = View.GONE
+
+        // WRAP_CONTENT 윈도우가 새 크기를 반영하도록 강제 갱신
+        overlayView?.let { windowManager.updateViewLayout(it, overlayParams) }
+    }
+
+    // =========================================================================
+    // 단순 클릭: 수집 미리보기 팝업
+    // =========================================================================
+
+    private fun showCollectionPreview() {
+        val dialog = AlertDialog.Builder(
+            ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Light_Dialog_NoActionBar)
+        )
+            .setTitle("수집 준비 완료")
+            .setMessage(
+                "아이템: 주문의 흔적\n" +
+                "예상 데이터: 가격, 거래량, 날짜"
+            )
+            .setPositiveButton("수집 시작") { _, _ ->
+                val btn  = overlayButton ?: return@setPositiveButton
+                val prog = progressBar   ?: return@setPositiveButton
+                startCollection(btn, prog)
+            }
+            .setNegativeButton("취소", null)
+            .create()
+
+        // 다른 앱 위에 표시하기 위해 TYPE_APPLICATION_OVERLAY 지정
+        dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+        dialog.show()
+    }
+
+    // =========================================================================
+    // 수집 실행
+    // =========================================================================
+
     private fun startCollection(button: ImageButton, progress: ProgressBar) {
+        // MediaProjection이 없으면 MainActivity를 통해 권한을 재요청하고 리턴
         val mp = mediaProjection ?: run {
-            toast("화면 캡처 권한이 없습니다. 앱을 재시작해주세요.")
+            startActivity(
+                Intent(this@OverlayService, MainActivity::class.java).apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    )
+                    action = ACTION_REQUEST_MEDIA_PROJECTION
+                }
+            )
             return
         }
+
         button.isEnabled    = false
         progress.visibility = View.VISIBLE
 
@@ -169,7 +289,6 @@ class OverlayService : Service() {
                     )
                 }
 
-                // OCR 완료 → ReviewActivity로 전달하여 사용자 확인 후 업로드
                 val recordsJson = Json.encodeToString(priceRecords)
                 startActivity(
                     Intent(this@OverlayService, ReviewActivity::class.java).apply {
@@ -190,6 +309,10 @@ class OverlayService : Service() {
         }
     }
 
+    // =========================================================================
+    // 유틸
+    // =========================================================================
+
     private fun toast(msg: String) =
         Toast.makeText(this@OverlayService, msg, Toast.LENGTH_SHORT).show()
 
@@ -198,6 +321,9 @@ class OverlayService : Service() {
             .replace(Regex("[^a-z0-9가-힣]"), "_")
             .replace(Regex("_+"), "_")
             .trim('_')
+
+    private fun dpToPx(dp: Int): Int =
+        (dp * resources.displayMetrics.density).toInt()
 
     private fun createNotificationChannel() {
         val ch = NotificationChannel(
@@ -213,13 +339,4 @@ class OverlayService : Service() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onDestroy() {
-        super.onDestroy()
-        serviceScope.cancel()
-        overlayView?.let { windowManager.removeView(it); overlayView = null }
-        screenCaptureManager?.release()
-    }
 }
