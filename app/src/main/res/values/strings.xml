@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">메이플 데이터 수집기</string>
+    <string name="accessibility_service_label">메이플 데이터 수집기</string>
+    <string name="accessibility_service_description">메이플핸즈+ 앱 거래 내역 자동 스크롤을 위해 사용됩니다.</string>
+    <string name="collect_button_desc">거래 내역 수집 시작</string>
+</resources>
