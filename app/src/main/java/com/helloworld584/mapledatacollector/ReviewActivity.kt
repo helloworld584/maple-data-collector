@@ -5,9 +5,8 @@ import android.view.LayoutInflater
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.*
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.decodeFromString
 
 class ReviewActivity : AppCompatActivity() {
 
@@ -147,7 +146,7 @@ class ReviewActivity : AppCompatActivity() {
                     }
                 )
             } catch (e: Exception) {
-                Toast.makeText(this, "오류: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@ReviewActivity, "오류: ${e.message}", Toast.LENGTH_LONG).show()
                 btnUpload.isEnabled = true
                 updateUploadButton()
             }
