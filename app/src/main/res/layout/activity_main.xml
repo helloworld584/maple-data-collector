@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FAFAFA">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#212121"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Supabase URL -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Supabase URL"
+            android:textSize="13sp"
+            android:textColor="#616161"
+            android:layout_marginBottom="4dp" />
+        <EditText
+            android:id="@+id/et_supabase_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="https://xxxx.supabase.co"
+            android:inputType="textUri"
+            android:singleLine="true"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Supabase API Key -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Supabase API Key (anon)"
+            android:textSize="13sp"
+            android:textColor="#616161"
+            android:layout_marginBottom="4dp" />
+        <EditText
+            android:id="@+id/et_supabase_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="eyJhbGciOiJIUzI1NiIs..."
+            android:inputType="textPassword"
+            android:singleLine="true"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Google Vision API Key -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Google Vision API Key"
+            android:textSize="13sp"
+            android:textColor="#616161"
+            android:layout_marginBottom="4dp" />
+        <EditText
+            android:id="@+id/et_vision_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="AIzaSy..."
+            android:inputType="textPassword"
+            android:singleLine="true"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/btn_save_settings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="설정 저장"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_request_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="오버레이 권한 요청"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_start_service"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="서비스 시작"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_stop_service"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="서비스 중지"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Log -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="수집 로그"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#212121"
+            android:layout_marginBottom="6dp" />
+
+        <ScrollView
+            android:id="@+id/scroll_log"
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:background="#F0F0F0"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/tv_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:textColor="#333333" />
+        </ScrollView>
+
+    </LinearLayout>
+</ScrollView>
