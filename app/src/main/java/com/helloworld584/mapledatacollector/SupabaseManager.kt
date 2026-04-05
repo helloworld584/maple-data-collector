@@ -37,9 +37,7 @@ class SupabaseManager(url: String, key: String) {
 
     suspend fun upsertPriceHistory(records: List<PriceHistoryRecord>): Result<Int> {
         return try {
-            client.from("price_history").upsert(records) {
-                onConflict = "game,item_id,date"
-            }
+            client.from("price_history").upsert(records)
             Result.success(records.size)
         } catch (e: Exception) {
             Result.failure(e)
@@ -48,9 +46,7 @@ class SupabaseManager(url: String, key: String) {
 
     suspend fun upsertItemMeta(records: List<ItemMetaRecord>): Result<Int> {
         return try {
-            client.from("item_meta").upsert(records) {
-                onConflict = "game,item_id"
-            }
+            client.from("item_meta").upsert(records)
             Result.success(records.size)
         } catch (e: Exception) {
             Result.failure(e)
