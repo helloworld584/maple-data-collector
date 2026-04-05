@@ -19,6 +19,8 @@ import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class OverlayService : Service() {
 
@@ -167,23 +169,15 @@ class OverlayService : Service() {
                     )
                 }
 
-                val supabase    = SupabaseManager(prefs.supabaseUrl, prefs.supabaseKey)
-                val existingIds = withContext(Dispatchers.IO) { supabase.getExistingItemIds() }
-
-                val newMeta = priceRecords
-                    .filter { it.item_id !in existingIds }
-                    .distinctBy { it.item_id }
-                    .map { ItemMetaRecord(item_id = it.item_id, item_name = it.item_name) }
-
-                if (newMeta.isNotEmpty()) {
-                    withContext(Dispatchers.IO) { supabase.upsertItemMeta(newMeta) }
-                }
-
-                val result = withContext(Dispatchers.IO) { supabase.upsertPriceHistory(priceRecords) }
-                result.fold(
-                    onSuccess = { count -> toast("저장 완료 ${count}건") },
-                    onFailure = { e    -> toast("저장 실패: ${e.message}") }
+                // OCR 완료 → ReviewActivity로 전달하여 사용자 확인 후 업로드
+                val recordsJson = Json.encodeToString(priceRecords)
+                startActivity(
+                    Intent(this@OverlayService, ReviewActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        putExtra(ReviewActivity.EXTRA_RECORDS_JSON, recordsJson)
+                    }
                 )
+                toast("OCR 완료 ${priceRecords.size}건 – 확인 후 업로드하세요.")
 
             } catch (e: Exception) {
                 toast("오류 발생: ${e.message}")

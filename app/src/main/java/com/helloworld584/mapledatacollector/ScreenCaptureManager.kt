@@ -18,7 +18,6 @@ class ScreenCaptureManager(
     context: Context,
     private val mediaProjection: MediaProjection
 ) {
-    private var imageReader: VirtualDisplay? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var reader: ImageReader? = null
 

@@ -23,6 +23,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Review activity: user confirms OCR results before upload -->
+        <activity
+            android:name=".ReviewActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- Overlay + screen capture foreground service -->
         <service
             android:name=".OverlayService"
