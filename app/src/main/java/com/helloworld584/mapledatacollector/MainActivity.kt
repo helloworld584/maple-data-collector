@@ -71,12 +71,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnStart.setOnClickListener {
-            when {
-                !Settings.canDrawOverlays(this) ->
-                    Toast.makeText(this, "먼저 오버레이 권한을 허용해주세요.", Toast.LENGTH_SHORT).show()
-                prefs.supabaseUrl.isEmpty() || prefs.supabaseKey.isEmpty() || prefs.visionApiKey.isEmpty() ->
-                    Toast.makeText(this, "모든 API 설정값을 입력 후 저장해주세요.", Toast.LENGTH_SHORT).show()
-                else -> requestMediaProjection()
+            // btnStart는 오버레이 권한이 없으면 비활성화되어 있으므로 여기선 API 키만 확인
+            if (prefs.supabaseUrl.isEmpty() || prefs.supabaseKey.isEmpty() || prefs.visionApiKey.isEmpty()) {
+                Toast.makeText(this, "모든 API 설정값을 입력 후 저장해주세요.", Toast.LENGTH_SHORT).show()
+            } else {
+                requestMediaProjection()
             }
         }
 
@@ -86,6 +85,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         updateOverlayButton()
+
+        // 앱 시작 시 오버레이 권한이 없으면 자동으로 요청 화면으로 이동
+        if (!Settings.canDrawOverlays(this)) {
+            log("오버레이 권한이 필요합니다. 허용 화면으로 이동합니다...")
+            startActivityForResult(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
+                REQUEST_OVERLAY
+            )
+        }
     }
 
     override fun onResume() {
@@ -123,10 +131,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateOverlayButton() {
-        btnOverlay.text = if (Settings.canDrawOverlays(this))
-            "오버레이 권한: ✓ 허용됨"
-        else
-            "오버레이 권한 요청"
+        val hasOverlay = Settings.canDrawOverlays(this)
+        btnOverlay.text    = if (hasOverlay) "오버레이 권한: ✓ 허용됨" else "오버레이 권한 요청"
+        btnStart.isEnabled = hasOverlay   // 권한 없으면 서비스 시작 버튼 비활성화
     }
 
     private fun log(message: String) {
