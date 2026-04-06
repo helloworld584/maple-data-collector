@@ -205,8 +205,8 @@ class OverlayService : Service() {
         )
             .setTitle("수집 준비 완료")
             .setMessage(
-                "아이템: 주문의 흔적\n" +
-                "예상 데이터: 가격, 거래량, 날짜"
+                "화면에 표시된 거래 내역을 캡처합니다.\n" +
+                "수집 데이터: 아이템명, 가격, 거래량, 날짜"
             )
             .setPositiveButton("수집 시작") { _, _ ->
                 val btn  = overlayButton ?: return@setPositiveButton
