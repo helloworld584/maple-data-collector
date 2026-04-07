@@ -20,6 +20,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageButton
 import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
@@ -41,6 +42,7 @@ class OverlayService : Service() {
     private var overlayView:   View?        = null
     private var overlayButton: ImageButton? = null
     private var progressBar:   ProgressBar? = null
+    private var statusText:    TextView?    = null
     private var overlayParams: WindowManager.LayoutParams? = null
 
     private var mediaProjection:      MediaProjection?      = null
@@ -166,8 +168,10 @@ class OverlayService : Service() {
         val view   = LayoutInflater.from(this).inflate(R.layout.overlay_button, null)
         val button = view.findViewById<ImageButton>(R.id.btn_collect)
         val prog   = view.findViewById<ProgressBar>(R.id.progress_indicator)
+        val status = view.findViewById<TextView>(R.id.tv_status)
         overlayButton = button
         progressBar   = prog
+        statusText    = status
 
         // Attach touch listener directly to the ImageButton — NOT the container.
         // If set on the FrameLayout root, the ImageButton child consumes touches first
@@ -249,41 +253,50 @@ class OverlayService : Service() {
 
         button.isEnabled    = false
         progress.visibility = View.VISIBLE
+        setStatus("준비 중...")
 
         serviceScope.launch {
             try {
                 val prefs = PreferencesManager(this@OverlayService)
 
                 if (prefs.supabaseUrl.isEmpty() || prefs.supabaseKey.isEmpty() || prefs.visionApiKey.isEmpty()) {
-                    toast("앱 설정에서 API 키를 먼저 입력해주세요.")
+                    toast("앱 설정에서 API 키를 먼저 입력해주세요.", long = true)
                     return@launch
                 }
 
+                setStatus("캡처 준비...")
                 val captureManager = ScreenCaptureManager(this@OverlayService, mp).also {
                     it.setup()
                     screenCaptureManager = it
                 }
 
-                toast("수집 시작...")
-                val bitmaps = captureManager.captureWithScroll()
+                setStatus("화면 캡처 중...")
+                val bitmaps = captureManager.captureWithScroll(
+                    onProgress = { count, scroll ->
+                        setStatus("캡처 $count 장 (스크롤 $scroll)")
+                    }
+                )
 
                 if (bitmaps.isEmpty()) {
-                    toast("캡처된 화면이 없습니다.")
+                    toast("캡처된 화면이 없습니다.\n접근성 서비스가 활성화되어 있는지 확인하세요.", long = true)
                     return@launch
                 }
 
                 val ocrManager = OcrManager(prefs.visionApiKey)
                 val allRecords = mutableListOf<TradeRecord>()
-                for (bmp in bitmaps) {
+                bitmaps.forEachIndexed { i, bmp ->
+                    setStatus("OCR 분석 중... (${i + 1}/${bitmaps.size})")
                     allRecords.addAll(ocrManager.extractTradeRecords(bmp))
                     bmp.recycle()
                 }
 
                 val unique = allRecords.distinctBy { Triple(it.itemName, it.price, it.date) }
                 if (unique.isEmpty()) {
-                    toast("파싱된 거래 내역이 없습니다.")
+                    toast("거래 내역을 찾지 못했습니다.\n화면에 MapleHandsPlus 거래 목록이 표시되어 있는지 확인하세요.", long = true)
                     return@launch
                 }
+
+                setStatus("완료: ${unique.size}건")
 
                 val priceRecords = unique.map { tr ->
                     PriceHistoryRecord(
@@ -302,13 +315,13 @@ class OverlayService : Service() {
                         putExtra(ReviewActivity.EXTRA_RECORDS_JSON, recordsJson)
                     }
                 )
-                toast("OCR 완료 ${priceRecords.size}건 – 확인 후 업로드하세요.")
 
             } catch (e: Exception) {
-                toast("오류 발생: ${e.message}")
+                toast("오류 발생: ${e.message}", long = true)
             } finally {
                 button.isEnabled    = true
                 progress.visibility = View.GONE
+                setStatus(null)
                 screenCaptureManager?.release()
                 screenCaptureManager = null
             }
@@ -319,8 +332,20 @@ class OverlayService : Service() {
     // 유틸
     // =========================================================================
 
-    private fun toast(msg: String) =
-        Toast.makeText(this@OverlayService, msg, Toast.LENGTH_SHORT).show()
+    /** null 전달 시 텍스트 뷰를 숨김 */
+    private fun setStatus(msg: String?) {
+        statusText?.let {
+            if (msg == null) {
+                it.visibility = View.GONE
+            } else {
+                it.text       = msg
+                it.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun toast(msg: String, long: Boolean = false) =
+        Toast.makeText(this@OverlayService, msg, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
 
     private fun toItemId(name: String): String =
         name.trim().lowercase()

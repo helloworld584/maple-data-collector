@@ -75,7 +75,8 @@ class ScreenCaptureManager(
      */
     suspend fun captureWithScroll(
         maxScrolls: Int = 20,
-        scrollDelayMs: Long = 1500L
+        scrollDelayMs: Long = 1500L,
+        onProgress: ((capturedCount: Int, scrollIndex: Int) -> Unit)? = null
     ): List<Bitmap> {
         val captures = mutableListOf<Bitmap>()
         var prevHash: Int? = null
@@ -83,9 +84,10 @@ class ScreenCaptureManager(
         captureScreen()?.let {
             prevHash = sampleHash(it)
             captures.add(it)
+            onProgress?.invoke(captures.size, 0)
         }
 
-        repeat(maxScrolls) {
+        repeat(maxScrolls) { scrollIndex ->
             MapleAccessibilityService.instance?.scrollDown()
             delay(scrollDelayMs)
 
@@ -98,6 +100,7 @@ class ScreenCaptureManager(
             }
             prevHash = hash
             captures.add(bitmap)
+            onProgress?.invoke(captures.size, scrollIndex + 1)
         }
 
         return captures

@@ -1,24 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal">
 
-    <ImageButton
-        android:id="@+id/btn_collect"
+    <FrameLayout
         android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:background="@drawable/circle_button_bg"
-        android:src="@android:drawable/ic_menu_camera"
-        android:scaleType="centerInside"
-        android:padding="12dp"
-        android:elevation="8dp"
-        android:contentDescription="@string/collect_button_desc" />
+        android:layout_height="56dp">
 
-    <ProgressBar
-        android:id="@+id/progress_indicator"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:visibility="gone"
-        android:indeterminateTint="#FFFFFF" />
+        <ImageButton
+            android:id="@+id/btn_collect"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/circle_button_bg"
+            android:src="@android:drawable/ic_menu_camera"
+            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:elevation="8dp"
+            android:contentDescription="@string/collect_button_desc" />
 
-</FrameLayout>
+        <ProgressBar
+            android:id="@+id/progress_indicator"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:visibility="gone"
+            android:indeterminateTint="#FFFFFF" />
+
+    </FrameLayout>
+
+    <!-- 수집 단계별 상태 텍스트. 수집 중에만 표시됨 -->
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:background="#CC000000"
+        android:textColor="#FFFFFF"
+        android:textSize="10sp"
+        android:maxLines="1"
+        android:visibility="gone" />
+
+</LinearLayout>
