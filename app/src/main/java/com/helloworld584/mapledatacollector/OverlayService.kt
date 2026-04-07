@@ -359,6 +359,9 @@ class OverlayService : Service() {
                 it.visibility = View.VISIBLE
             }
         }
+        // WindowManager must be notified to recalculate WRAP_CONTENT size
+        // whenever child view visibility or text changes.
+        overlayView?.let { v -> overlayParams?.let { p -> windowManager.updateViewLayout(v, p) } }
     }
 
     private fun toast(msg: String, long: Boolean = false) =

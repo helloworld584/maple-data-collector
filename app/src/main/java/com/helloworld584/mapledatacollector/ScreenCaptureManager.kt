@@ -33,6 +33,18 @@ class ScreenCaptureManager(
     }
 
     fun setup() {
+        // Android 14+ (API 34) requires a Callback registered before createVirtualDisplay.
+        // Without it, createVirtualDisplay throws IllegalStateException.
+        mediaProjection.registerCallback(object : MediaProjection.Callback() {
+            override fun onStop() {
+                // MediaProjection was stopped externally (e.g. user revoked permission).
+                virtualDisplay?.release()
+                reader?.close()
+                virtualDisplay = null
+                reader         = null
+            }
+        }, Handler(Looper.getMainLooper()))
+
         val ir = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
         reader = ir
         virtualDisplay = mediaProjection.createVirtualDisplay(
