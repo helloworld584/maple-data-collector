@@ -111,7 +111,17 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateOverlayButton()
-        // OverlayService 로그 수신 시작
+
+        // 백그라운드에 있는 동안 쌓인 서비스 로그 일괄 표시
+        val buffered = OverlayService.pendingLogs.toList()
+        OverlayService.pendingLogs.clear()
+        if (buffered.isNotEmpty()) {
+            log("── 백그라운드 로그 (${buffered.size}건) ──")
+            buffered.forEach { log("[서비스] $it") }
+            log("──────────────────────")
+        }
+
+        // 이후 실시간 수신 시작
         val filter = IntentFilter(OverlayService.ACTION_LOG)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(serviceLogReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
