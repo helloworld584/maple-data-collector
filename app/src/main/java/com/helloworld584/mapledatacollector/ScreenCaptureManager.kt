@@ -62,6 +62,12 @@ class ScreenCaptureManager(
     suspend fun captureScreen(): Bitmap? = suspendCancellableCoroutine { cont ->
         val r = reader ?: run { cont.resume(null); return@suspendCancellableCoroutine }
 
+        // Drain stale frames that accumulated in the buffer during the scroll delay.
+        // setOnImageAvailableListener only fires for NEW frames added after registration.
+        // If the buffer is already full (maxImages=2), no new frame can enter and the
+        // listener never fires — causing captureScreen() to hang indefinitely.
+        try { r.acquireLatestImage()?.close() } catch (_: Exception) {}
+
         r.setOnImageAvailableListener({ ir ->
             ir.setOnImageAvailableListener(null, null)
             val image: Image? = ir.acquireLatestImage()
