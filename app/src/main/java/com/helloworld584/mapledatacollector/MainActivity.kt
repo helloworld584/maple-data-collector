@@ -71,7 +71,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnStart.setOnClickListener {
-            // btnStart는 오버레이 권한이 없으면 비활성화되어 있으므로 여기선 API 키만 확인
+            logApiKeyStatus()
             if (prefs.supabaseUrl.isEmpty() || prefs.supabaseKey.isEmpty() || prefs.visionApiKey.isEmpty()) {
                 Toast.makeText(this, "모든 API 설정값을 입력 후 저장해주세요.", Toast.LENGTH_SHORT).show()
             } else {
@@ -146,7 +146,17 @@ class MainActivity : AppCompatActivity() {
     private fun updateOverlayButton() {
         val hasOverlay = Settings.canDrawOverlays(this)
         btnOverlay.text    = if (hasOverlay) "오버레이 권한: ✓ 허용됨" else "오버레이 권한 요청"
-        btnStart.isEnabled = hasOverlay   // 권한 없으면 서비스 시작 버튼 비활성화
+        btnStart.isEnabled = hasOverlay
+    }
+
+    /** 서비스 시작 전 API 키 설정 상태를 로그에 출력 (키 값은 노출하지 않음) */
+    private fun logApiKeyStatus() {
+        log("─── 설정 상태 확인 ───")
+        log("Supabase URL  : ${if (prefs.supabaseUrl.isNotEmpty()) "✓ 설정됨 (${prefs.supabaseUrl.take(20)}...)" else "✗ 미설정"}")
+        log("Supabase Key  : ${if (prefs.supabaseKey.isNotEmpty()) "✓ 설정됨 (${prefs.supabaseKey.length}자)" else "✗ 미설정"}")
+        log("Vision API Key: ${if (prefs.visionApiKey.isNotEmpty()) "✓ 설정됨 (${prefs.visionApiKey.length}자)" else "✗ 미설정"}")
+        log("오버레이 권한 : ${if (Settings.canDrawOverlays(this)) "✓ 허용됨" else "✗ 거부됨"}")
+        log("──────────────────────")
     }
 
     private fun log(message: String) {

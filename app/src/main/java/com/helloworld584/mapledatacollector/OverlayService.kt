@@ -1,5 +1,6 @@
 package com.helloworld584.mapledatacollector
 
+import android.app.Activity
 import android.app.AlertDialog
 import android.app.Notification
 import android.app.NotificationChannel
@@ -111,11 +112,14 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, -1) ?: -1
+        // Activity.RESULT_OK == -1, so use RESULT_CANCELED (0) as the "not set" sentinel.
+        // Using -1 as default causes RESULT_OK to be indistinguishable from "extra missing".
+        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+            ?: Activity.RESULT_CANCELED
         @Suppress("DEPRECATION")
         val resultData: Intent? = intent?.getParcelableExtra(EXTRA_RESULT_DATA)
 
-        if (resultCode != -1 && resultData != null) {
+        if (resultCode == Activity.RESULT_OK && resultData != null) {
             val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             mediaProjection = mgr.getMediaProjection(resultCode, resultData)
         }
@@ -130,6 +134,11 @@ class OverlayService : Service() {
         serviceScope.cancel()
         overlayView?.let { windowManager.removeView(it); overlayView = null }
         screenCaptureManager?.release()
+        // Stop MediaProjection only when the service is fully destroyed.
+        // ScreenCaptureManager.release() does NOT stop it, so we can reuse it
+        // across multiple collections within the same service session.
+        mediaProjection?.stop()
+        mediaProjection = null
     }
 
     // =========================================================================

@@ -121,6 +121,8 @@ class ScreenCaptureManager(
         reader?.close()
         virtualDisplay = null
         reader         = null
-        mediaProjection.stop()
+        // Do NOT stop mediaProjection here. OverlayService owns its lifecycle
+        // and will stop it in onDestroy(). This allows multiple collections
+        // within the same service session without re-requesting permission.
     }
 }
