@@ -34,6 +34,11 @@ class OverlayService : Service() {
         const val EXTRA_RESULT_DATA = "extra_result_data"
         const val ACTION_REQUEST_MEDIA_PROJECTION =
             "com.helloworld584.mapledatacollector.REQUEST_MEDIA_PROJECTION"
+
+        /** MainActivity 로그 창으로 메시지를 전달하는 브로드캐스트 액션 */
+        const val ACTION_LOG          = "com.helloworld584.mapledatacollector.LOG"
+        const val EXTRA_LOG_MESSAGE   = "log_message"
+
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID      = "maple_collector_channel"
     }
@@ -52,20 +57,11 @@ class OverlayService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    /**
-     * GestureDetector handles all three interactions:
-     *  - onDown()            : MUST return true — otherwise subsequent events are dropped
-     *  - onSingleTapConfirmed: single tap (fires after double-tap timeout to avoid false positives)
-     *  - onDoubleTap         : minimize / expand toggle
-     *  - onScroll            : drag to move overlay (any movement that exceeds touch slop)
-     */
     private val gestureDetector: GestureDetector by lazy {
         GestureDetector(applicationContext, object : GestureDetector.SimpleOnGestureListener() {
 
-            // Critical: return true so GestureDetector continues processing this gesture sequence
             override fun onDown(e: MotionEvent): Boolean = true
 
-            // Single tap — show collection preview dialog
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 val btn = overlayButton ?: return false
                 if (!btn.isEnabled) return false
@@ -73,13 +69,11 @@ class OverlayService : Service() {
                 return true
             }
 
-            // Double-tap — minimize or expand the button
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 toggleMinimize()
                 return true
             }
 
-            // Any drag movement — reposition the overlay
             override fun onScroll(
                 e1: MotionEvent?,
                 e2: MotionEvent,
@@ -87,13 +81,7 @@ class OverlayService : Service() {
                 distanceY: Float
             ): Boolean {
                 overlayParams?.let { p ->
-                    // Gravity.END: params.x = distance from RIGHT edge
-                    //   distanceX > 0 means finger moved LEFT  → button follows → x increases
-                    //   distanceX < 0 means finger moved RIGHT → button follows → x decreases
                     p.x = (p.x + distanceX).toInt().coerceAtLeast(0)
-                    // Gravity.TOP: params.y = distance from TOP
-                    //   distanceY > 0 means finger moved UP   → y decreases
-                    //   distanceY < 0 means finger moved DOWN → y increases
                     p.y = (p.y - distanceY).toInt().coerceAtLeast(0)
                     overlayView?.let { windowManager.updateViewLayout(it, p) }
                 }
@@ -103,7 +91,7 @@ class OverlayService : Service() {
     }
 
     // =========================================================================
-    // Service lifecycle
+    // 서비스 생명주기
     // =========================================================================
 
     override fun onCreate() {
@@ -114,8 +102,6 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Activity.RESULT_OK == -1, so use RESULT_CANCELED (0) as the "not set" sentinel.
-        // Using -1 as default causes RESULT_OK to be indistinguishable from "extra missing".
         val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
             ?: Activity.RESULT_CANCELED
         @Suppress("DEPRECATION")
@@ -124,6 +110,7 @@ class OverlayService : Service() {
         if (resultCode == Activity.RESULT_OK && resultData != null) {
             val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             mediaProjection = mgr.getMediaProjection(resultCode, resultData)
+            log("화면 캡처 권한 획득 완료")
         }
         showOverlay()
         return START_STICKY
@@ -136,9 +123,6 @@ class OverlayService : Service() {
         serviceScope.cancel()
         overlayView?.let { windowManager.removeView(it); overlayView = null }
         screenCaptureManager?.release()
-        // Stop MediaProjection only when the service is fully destroyed.
-        // ScreenCaptureManager.release() does NOT stop it, so we can reuse it
-        // across multiple collections within the same service session.
         mediaProjection?.stop()
         mediaProjection = null
     }
@@ -154,8 +138,6 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            // FLAG_NOT_FOCUSABLE: does not steal focus from the underlying app.
-            // Do NOT add FLAG_NOT_TOUCHABLE — that would block all touch input.
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -173,16 +155,14 @@ class OverlayService : Service() {
         progressBar   = prog
         statusText    = status
 
-        // Attach touch listener directly to the ImageButton — NOT the container.
-        // If set on the FrameLayout root, the ImageButton child consumes touches first
-        // and the listener on the parent is never called.
         button.setOnTouchListener { _, event ->
             gestureDetector.onTouchEvent(event)
-            true   // consume every event so the button's default click mechanism doesn't interfere
+            true
         }
 
         overlayView = view
         windowManager.addView(view, params)
+        log("오버레이 버튼 표시됨 (탭: 수집 시작, 더블탭: 최소화, 드래그: 이동)")
     }
 
     // =========================================================================
@@ -192,7 +172,6 @@ class OverlayService : Service() {
     private fun toggleMinimize() {
         isMinimized = !isMinimized
         val sizePx = dpToPx(if (isMinimized) 16 else 56)
-
         overlayButton?.let { btn ->
             val lp    = btn.layoutParams
             lp.width  = sizePx
@@ -227,7 +206,6 @@ class OverlayService : Service() {
             .setNegativeButton("취소", null)
             .create()
 
-        // Required to display dialog on top of other apps from a Service
         dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
         dialog.show()
     }
@@ -238,6 +216,7 @@ class OverlayService : Service() {
 
     private fun startCollection(button: ImageButton, progress: ProgressBar) {
         val mp = mediaProjection ?: run {
+            log("화면 캡처 권한 없음 → 권한 재요청")
             startActivity(
                 Intent(this@OverlayService, MainActivity::class.java).apply {
                     addFlags(
@@ -257,46 +236,73 @@ class OverlayService : Service() {
 
         serviceScope.launch {
             try {
+                log("=== 수집 시작 ===")
+
+                // ── 사전 점검 ────────────────────────────────────────────────
                 val prefs = PreferencesManager(this@OverlayService)
+                log("Supabase URL  : ${if (prefs.supabaseUrl.isNotEmpty()) "✓ (${prefs.supabaseUrl.take(30)}...)" else "✗ 미설정"}")
+                log("Supabase Key  : ${if (prefs.supabaseKey.isNotEmpty()) "✓ (${prefs.supabaseKey.length}자)" else "✗ 미설정"}")
+                log("Vision API Key: ${if (prefs.visionApiKey.isNotEmpty()) "✓ (${prefs.visionApiKey.length}자)" else "✗ 미설정"}")
+                val a11y = MapleAccessibilityService.instance
+                log("접근성 서비스 : ${if (a11y != null) "✓ 활성화" else "✗ 비활성화 (자동 스크롤 없음 — 첫 화면만 캡처)"}")
 
                 if (prefs.supabaseUrl.isEmpty() || prefs.supabaseKey.isEmpty() || prefs.visionApiKey.isEmpty()) {
+                    log("오류: API 키 미설정 → 수집 중단")
                     toast("앱 설정에서 API 키를 먼저 입력해주세요.", long = true)
                     return@launch
                 }
 
+                // ── 화면 캡처 ────────────────────────────────────────────────
                 setStatus("캡처 준비...")
+                log("VirtualDisplay 초기화 중...")
                 val captureManager = ScreenCaptureManager(this@OverlayService, mp).also {
                     it.setup()
                     screenCaptureManager = it
                 }
+                log("VirtualDisplay 준비 완료")
 
                 setStatus("화면 캡처 중...")
+                log("화면 캡처 시작 (최대 20회 스크롤)")
                 val bitmaps = captureManager.captureWithScroll(
                     onProgress = { count, scroll ->
-                        setStatus("캡처 $count 장 (스크롤 $scroll)")
+                        val msg = "캡처 ${count}장 완료 (스크롤 ${scroll}회)"
+                        setStatus("캡처 ${count}장 (스크롤 ${scroll})")
+                        log(msg)
                     }
                 )
+                log("캡처 종료: 총 ${bitmaps.size}장")
 
                 if (bitmaps.isEmpty()) {
+                    log("오류: 캡처된 화면 없음")
                     toast("캡처된 화면이 없습니다.\n접근성 서비스가 활성화되어 있는지 확인하세요.", long = true)
                     return@launch
                 }
 
+                // ── OCR ──────────────────────────────────────────────────────
                 val ocrManager = OcrManager(prefs.visionApiKey)
                 val allRecords = mutableListOf<TradeRecord>()
                 bitmaps.forEachIndexed { i, bmp ->
-                    setStatus("OCR 분석 중... (${i + 1}/${bitmaps.size})")
-                    allRecords.addAll(ocrManager.extractTradeRecords(bmp))
+                    val step = "${i + 1}/${bitmaps.size}"
+                    setStatus("OCR 분석 중... ($step)")
+                    log("OCR 요청 중 ($step)...")
+                    val records = ocrManager.extractTradeRecords(bmp)
+                    log("OCR 완료 ($step): ${records.size}건 파싱")
+                    allRecords.addAll(records)
                     bmp.recycle()
                 }
 
                 val unique = allRecords.distinctBy { Triple(it.itemName, it.price, it.date) }
+                log("중복 제거 후: ${unique.size}건 (전체 ${allRecords.size}건)")
+
                 if (unique.isEmpty()) {
-                    toast("거래 내역을 찾지 못했습니다.\n화면에 MapleHandsPlus 거래 목록이 표시되어 있는지 확인하세요.", long = true)
+                    log("오류: 파싱된 거래 내역 없음 — OCR 텍스트를 인식하지 못했거나 패턴 불일치")
+                    toast("거래 내역을 찾지 못했습니다.\nMapleHandsPlus 거래 목록 화면인지 확인하세요.", long = true)
                     return@launch
                 }
 
+                // ── ReviewActivity 전달 ────────────────────────────────────
                 setStatus("완료: ${unique.size}건")
+                log("ReviewActivity 시작 (${unique.size}건 확인 후 업로드)")
 
                 val priceRecords = unique.map { tr ->
                     PriceHistoryRecord(
@@ -317,6 +323,7 @@ class OverlayService : Service() {
                 )
 
             } catch (e: Exception) {
+                log("예외 발생: ${e.javaClass.simpleName}: ${e.message}")
                 toast("오류 발생: ${e.message}", long = true)
             } finally {
                 button.isEnabled    = true
@@ -324,6 +331,7 @@ class OverlayService : Service() {
                 setStatus(null)
                 screenCaptureManager?.release()
                 screenCaptureManager = null
+                log("=== 수집 종료 ===")
             }
         }
     }
@@ -332,7 +340,16 @@ class OverlayService : Service() {
     // 유틸
     // =========================================================================
 
-    /** null 전달 시 텍스트 뷰를 숨김 */
+    /**
+     * 오버레이 상태 텍스트 + MainActivity 로그 창에 동시 전달.
+     * null 전달 시 오버레이 텍스트만 숨김.
+     */
+    private fun log(msg: String) {
+        sendBroadcast(
+            Intent(ACTION_LOG).putExtra(EXTRA_LOG_MESSAGE, msg)
+        )
+    }
+
     private fun setStatus(msg: String?) {
         statusText?.let {
             if (msg == null) {

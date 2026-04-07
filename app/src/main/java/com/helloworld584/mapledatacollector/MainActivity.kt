@@ -1,9 +1,13 @@
 package com.helloworld584.mapledatacollector
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.*
@@ -29,6 +33,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnStop:       Button
     private lateinit var tvLog:         TextView
     private lateinit var scrollLog:     ScrollView
+
+    /** OverlayService → MainActivity 실시간 로그 수신기 */
+    private val serviceLogReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val msg = intent?.getStringExtra(OverlayService.EXTRA_LOG_MESSAGE) ?: return
+            log("[서비스] $msg")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,6 +111,19 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateOverlayButton()
+        // OverlayService 로그 수신 시작
+        val filter = IntentFilter(OverlayService.ACTION_LOG)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(serviceLogReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(serviceLogReceiver, filter)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { unregisterReceiver(serviceLogReceiver) } catch (_: Exception) {}
     }
 
     /**
@@ -152,9 +177,9 @@ class MainActivity : AppCompatActivity() {
     /** 서비스 시작 전 API 키 설정 상태를 로그에 출력 (키 값은 노출하지 않음) */
     private fun logApiKeyStatus() {
         log("─── 설정 상태 확인 ───")
-        log("Supabase URL  : ${if (prefs.supabaseUrl.isNotEmpty()) "✓ 설정됨 (${prefs.supabaseUrl.take(20)}...)" else "✗ 미설정"}")
-        log("Supabase Key  : ${if (prefs.supabaseKey.isNotEmpty()) "✓ 설정됨 (${prefs.supabaseKey.length}자)" else "✗ 미설정"}")
-        log("Vision API Key: ${if (prefs.visionApiKey.isNotEmpty()) "✓ 설정됨 (${prefs.visionApiKey.length}자)" else "✗ 미설정"}")
+        log("Supabase URL  : ${if (prefs.supabaseUrl.isNotEmpty()) "✓ (${prefs.supabaseUrl.take(20)}...)" else "✗ 미설정"}")
+        log("Supabase Key  : ${if (prefs.supabaseKey.isNotEmpty()) "✓ (${prefs.supabaseKey.length}자)" else "✗ 미설정"}")
+        log("Vision API Key: ${if (prefs.visionApiKey.isNotEmpty()) "✓ (${prefs.visionApiKey.length}자)" else "✗ 미설정"}")
         log("오버레이 권한 : ${if (Settings.canDrawOverlays(this)) "✓ 허용됨" else "✗ 거부됨"}")
         log("──────────────────────")
     }
