@@ -29,8 +29,13 @@ class OcrManager(private val apiKey: String) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** 마지막 Vision API 응답 원문. 파싱 디버깅 용도. */
+    var lastRawText: String? = null
+        private set
+
     suspend fun extractTradeRecords(bitmap: Bitmap): List<TradeRecord> = withContext(Dispatchers.IO) {
         val rawText = callVisionApi(bitmap) ?: return@withContext emptyList()
+        lastRawText = rawText
         parseTradeRecords(rawText)
     }
 

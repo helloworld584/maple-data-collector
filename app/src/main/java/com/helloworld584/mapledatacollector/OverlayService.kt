@@ -300,6 +300,19 @@ class OverlayService : Service() {
                     log("OCR 요청 중 ($step)...")
                     val records = ocrManager.extractTradeRecords(bmp)
                     log("OCR 완료 ($step): ${records.size}건 파싱")
+                    if (records.isEmpty()) {
+                        // 파싱 실패 시 원문 첫 800자를 로그에 남겨 정규식 검토에 활용
+                        val raw = ocrManager.lastRawText
+                        if (raw == null) {
+                            log("OCR 원문 없음 (API 오류 또는 빈 응답)")
+                        } else {
+                            log("OCR 원문 (${raw.length}자) — 처음 800자:")
+                            // 로그 한 줄이 너무 길면 잘려 보일 수 있으므로 200자씩 나눠 출력
+                            raw.take(800).chunked(200).forEachIndexed { idx, chunk ->
+                                log("  [${idx + 1}] $chunk")
+                            }
+                        }
+                    }
                     allRecords.addAll(records)
                     bmp.recycle()
                 }
@@ -308,7 +321,7 @@ class OverlayService : Service() {
                 log("중복 제거 후: ${unique.size}건 (전체 ${allRecords.size}건)")
 
                 if (unique.isEmpty()) {
-                    log("OCR 결과 없음 — 거래 목록 화면인지, Vision API 키가 올바른지 확인")
+                    log("파싱 실패 — 위 OCR 원문을 보고 가격/거래량/날짜 패턴을 확인하세요")
                     setStatus("✗ OCR 결과 없음")
                     toast("거래 내역을 찾지 못했습니다.\n수집 앱 로그를 확인하세요.", long = true)
                     return@launch
