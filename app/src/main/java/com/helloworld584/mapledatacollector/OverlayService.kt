@@ -30,7 +30,6 @@ class OverlayService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
-        /** MainActivity가 이 Action을 받으면 MediaProjection 권한 요청 다이얼로그를 띄운다 */
         const val ACTION_REQUEST_MEDIA_PROJECTION =
             "com.helloworld584.mapledatacollector.REQUEST_MEDIA_PROJECTION"
         private const val NOTIFICATION_ID = 1001
@@ -43,25 +42,27 @@ class OverlayService : Service() {
     private var progressBar:   ProgressBar? = null
     private var overlayParams: WindowManager.LayoutParams? = null
 
-    private var mediaProjection:    MediaProjection?    = null
+    private var mediaProjection:      MediaProjection?      = null
     private var screenCaptureManager: ScreenCaptureManager? = null
 
-    // ── 드래그 상태 (long-press 후 활성화) ───────────────────────────────────
-    private var isDragMode  = false
-    private var dragInitX   = 0;   private var dragInitY   = 0
-    private var dragInitTX  = 0f;  private var dragInitTY  = 0f
-    private var lastRawX    = 0f;  private var lastRawY    = 0f
-
-    // ── 최소화 상태 (double-tap 토글) ─────────────────────────────────────────
     private var isMinimized = false
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    // GestureDetector: single-tap / double-tap / long-press 분기
+    /**
+     * GestureDetector handles all three interactions:
+     *  - onDown()            : MUST return true — otherwise subsequent events are dropped
+     *  - onSingleTapConfirmed: single tap (fires after double-tap timeout to avoid false positives)
+     *  - onDoubleTap         : minimize / expand toggle
+     *  - onScroll            : drag to move overlay (any movement that exceeds touch slop)
+     */
     private val gestureDetector: GestureDetector by lazy {
         GestureDetector(applicationContext, object : GestureDetector.SimpleOnGestureListener() {
 
-            /** 단순 클릭 → 미리보기 팝업 */
+            // Critical: return true so GestureDetector continues processing this gesture sequence
+            override fun onDown(e: MotionEvent): Boolean = true
+
+            // Single tap — show collection preview dialog
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 val btn = overlayButton ?: return false
                 if (!btn.isEnabled) return false
@@ -69,25 +70,37 @@ class OverlayService : Service() {
                 return true
             }
 
-            /** 더블탭 → 축소 / 복원 토글 */
+            // Double-tap — minimize or expand the button
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 toggleMinimize()
                 return true
             }
 
-            /** 길게 누름 → 드래그 모드 진입 */
-            override fun onLongPress(e: MotionEvent) {
-                isDragMode  = true
-                dragInitX   = overlayParams?.x ?: 0
-                dragInitY   = overlayParams?.y ?: 0
-                dragInitTX  = lastRawX
-                dragInitTY  = lastRawY
+            // Any drag movement — reposition the overlay
+            override fun onScroll(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                distanceX: Float,
+                distanceY: Float
+            ): Boolean {
+                overlayParams?.let { p ->
+                    // Gravity.END: params.x = distance from RIGHT edge
+                    //   distanceX > 0 means finger moved LEFT  → button follows → x increases
+                    //   distanceX < 0 means finger moved RIGHT → button follows → x decreases
+                    p.x = (p.x + distanceX).toInt().coerceAtLeast(0)
+                    // Gravity.TOP: params.y = distance from TOP
+                    //   distanceY > 0 means finger moved UP   → y decreases
+                    //   distanceY < 0 means finger moved DOWN → y increases
+                    p.y = (p.y - distanceY).toInt().coerceAtLeast(0)
+                    overlayView?.let { windowManager.updateViewLayout(it, p) }
+                }
+                return true
             }
         })
     }
 
     // =========================================================================
-    // 서비스 생명주기
+    // Service lifecycle
     // =========================================================================
 
     override fun onCreate() {
@@ -130,6 +143,8 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            // FLAG_NOT_FOCUSABLE: does not steal focus from the underlying app.
+            // Do NOT add FLAG_NOT_TOUCHABLE — that would block all touch input.
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -145,27 +160,12 @@ class OverlayService : Service() {
         overlayButton = button
         progressBar   = prog
 
-        view.setOnTouchListener { _, event ->
-            // 항상 현재 위치를 기록 (long-press 드래그 시작점에 사용)
-            lastRawX = event.rawX
-            lastRawY = event.rawY
-
-            // GestureDetector에 모든 이벤트 전달 (single/double/longpress 판별)
+        // Attach touch listener directly to the ImageButton — NOT the container.
+        // If set on the FrameLayout root, the ImageButton child consumes touches first
+        // and the listener on the parent is never called.
+        button.setOnTouchListener { _, event ->
             gestureDetector.onTouchEvent(event)
-
-            // long-press 이후 드래그 처리
-            if (isDragMode) {
-                when (event.action) {
-                    MotionEvent.ACTION_MOVE -> {
-                        params.x = dragInitX + (dragInitTX - event.rawX).toInt()
-                        params.y = dragInitY + (event.rawY  - dragInitTY).toInt()
-                        windowManager.updateViewLayout(view, params)
-                    }
-                    MotionEvent.ACTION_UP,
-                    MotionEvent.ACTION_CANCEL -> isDragMode = false
-                }
-            }
-            true
+            true   // consume every event so the button's default click mechanism doesn't interfere
         }
 
         overlayView = view
@@ -181,17 +181,15 @@ class OverlayService : Service() {
         val sizePx = dpToPx(if (isMinimized) 16 else 56)
 
         overlayButton?.let { btn ->
-            val lp     = btn.layoutParams
-            lp.width   = sizePx
-            lp.height  = sizePx
+            val lp    = btn.layoutParams
+            lp.width  = sizePx
+            lp.height = sizePx
             btn.layoutParams = lp
-            btn.alpha  = if (isMinimized) 0.4f else 1.0f
+            btn.alpha = if (isMinimized) 0.4f else 1.0f
             if (isMinimized) btn.setImageDrawable(null)
             else             btn.setImageResource(android.R.drawable.ic_menu_camera)
         }
         if (isMinimized) progressBar?.visibility = View.GONE
-
-        // WRAP_CONTENT 윈도우가 새 크기를 반영하도록 강제 갱신
         overlayView?.let { windowManager.updateViewLayout(it, overlayParams) }
     }
 
@@ -216,7 +214,7 @@ class OverlayService : Service() {
             .setNegativeButton("취소", null)
             .create()
 
-        // 다른 앱 위에 표시하기 위해 TYPE_APPLICATION_OVERLAY 지정
+        // Required to display dialog on top of other apps from a Service
         dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
         dialog.show()
     }
@@ -226,7 +224,6 @@ class OverlayService : Service() {
     // =========================================================================
 
     private fun startCollection(button: ImageButton, progress: ProgressBar) {
-        // MediaProjection이 없으면 MainActivity를 통해 권한을 재요청하고 리턴
         val mp = mediaProjection ?: run {
             startActivity(
                 Intent(this@OverlayService, MainActivity::class.java).apply {
